@@ -5,33 +5,31 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("Ingrese la IP de origen:");
-        string sourceIp = Console.ReadLine();
-        
-        Console.WriteLine("Ingrese la IP de destino:");
-        string destIp = Console.ReadLine();
+        string sourceIp = GetValidIP("origen");
+        string destIp = GetValidIP("destino");
 
-        // Validar IP de origen
-        if (IsValidIP(sourceIp))
-        {
-            Console.WriteLine($"La IP de origen '{sourceIp}' es válida.");
-        }
-        else
-        {
-            Console.WriteLine($"La IP de origen '{sourceIp}' no es válida. Por favor ingrese una IP válida.");
-            return;
-        }
+        Console.WriteLine($"IP de origen válida: {sourceIp}");
+        Console.WriteLine($"IP de destino válida: {destIp}");
+    }
 
-        // Validar IP de destino
-        if (IsValidIP(destIp))
+    static string GetValidIP(string tipo)
+    {
+        string ip;
+        bool isValid = false;
+
+        do
         {
-            Console.WriteLine($"La IP de destino '{destIp}' es válida.");
-        }
-        else
-        {
-            Console.WriteLine($"La IP de destino '{destIp}' no es válida. Por favor ingrese una IP válida.");
-            return;
-        }
+            Console.WriteLine($"Ingrese la IP de {tipo}:");
+            ip = Console.ReadLine();
+            isValid = IsValidIP(ip);
+            
+            if (!isValid)
+            {
+                Console.WriteLine($"La IP de {tipo} '{ip}' no es válida. Inténtalo de nuevo.");
+            }
+        } while (!isValid);
+
+        return ip;
     }
 
     static bool IsValidIP(string ip)
@@ -51,7 +49,6 @@ class Program
             }
         }
 
-        // Si llega aquí, no es una IP válida
         return false;
     }
 }
