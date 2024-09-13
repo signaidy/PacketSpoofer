@@ -10,15 +10,21 @@ class Program
         string sourceIp = GetValidIP("origen", null);
         string destIp = GetValidIP("destino", sourceIp);
 
-        // Puertos de origen y destino
-        int sourcePort = 12345;
-        int destPort = 80; // Puerto HTTP
-
-        // Crea el paquete TCP/IP
-        byte[] packet = CreateTcpIpPacket(sourceIp, destIp, sourcePort, destPort);
-
-        // Envío del paquete
-        SendRawPacket(packet, destIp);
+        if (IPAddress.TryParse(sourceIp, out IPAddress srcAddress) && IPAddress.TryParse(destIp, out IPAddress dstAddress))
+        {
+            if (srcAddress.AddressFamily == AddressFamily.InterNetwork)
+            {
+                Console.WriteLine("Creando paquete IPv4...");
+                byte[] packet = CreateIPv4Packet(srcAddress, dstAddress);
+                SendPacket(packet, AddressFamily.InterNetwork);
+            }
+            else if (srcAddress.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                Console.WriteLine("Creando paquete IPv6...");
+                byte[] packet = CreateIPv6Packet(srcAddress, dstAddress);
+                SendPacket(packet, AddressFamily.InterNetworkV6);
+            }
+        }
     }
 
     static string GetValidIP(string tipo, string previousIp)
@@ -38,10 +44,12 @@ class Program
             }
             else if (ip.ToLower() == "back" && previousIp != null)
             {
+                Console.WriteLine("Regresando a la opción anterior...");
                 return null;
             }
 
-            isValid = IPAddress.TryParse(ip, out IPAddress address);
+            isValid = IsValidIP(ip);
+
             if (!isValid)
             {
                 Console.WriteLine($"La IP de {tipo} '{ip}' no es válida. Inténtalo de nuevo.");
@@ -51,60 +59,118 @@ class Program
         return ip;
     }
 
-    static byte[] CreateTcpIpPacket(string sourceIp, string destIp, int sourcePort, int destPort)
+    static bool IsValidIP(string ip)
     {
-        byte[] packet = new byte[40]; // Tamaño de encabezados IP + TCP (20 bytes cada uno)
+        if (IPAddress.TryParse(ip, out IPAddress address))
+        {
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                Console.WriteLine($"{ip} es una dirección IPv4.");
+                return true;
+            }
+            else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                Console.WriteLine($"{ip} es una dirección IPv6.");
+                return true;
+            }
+        }
 
-        // Llenar la cabecera IP
-        packet[0] = 0x45; // Versión IPv4 y longitud de cabecera (5 palabras)
-        packet[1] = 0x00; // Tipo de servicio
-        packet[2] = 0x00; // Longitud total del paquete (más adelante)
-        packet[3] = 0x28; // Longitud total
-        packet[4] = 0x1C; // Identificación
-        packet[5] = 0x46; // Identificación
-        packet[6] = 0x40; // Flags
-        packet[7] = 0x00; // Fragment offset
-        packet[8] = 0x40; // TTL (64)
-        packet[9] = 0x06; // Protocolo (TCP)
-        packet[10] = 0x00; // Checksum (será calculado más adelante)
-        packet[11] = 0x00;
+        return false;
+    }
 
-        // IP Origen
-        Array.Copy(IPAddress.Parse(sourceIp).GetAddressBytes(), 0, packet, 12, 4);
+    static byte[] CreateIPv4Packet(IPAddress sourceIp, IPAddress destIp)
+    {
+        byte[] packet = new byte[20 + 20]; // 20 bytes header IP + 20 bytes header TCP
 
-        // IP Destino
-        Array.Copy(IPAddress.Parse(destIp).GetAddressBytes(), 0, packet, 16, 4);
+        // Header IPv4
+        packet[0] = 0x45; // Version (4 bits) + IHL (4 bits)
+        packet[8] = 64;   // TTL
+        packet[9] = 6;    // Protocolo TCP
 
-        // Llenar la cabecera TCP
-        Array.Copy(BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)sourcePort)), 0, packet, 20, 2); // Puerto origen
-        Array.Copy(BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)destPort)), 0, packet, 22, 2); // Puerto destino
-        Array.Copy(BitConverter.GetBytes((uint)0), 0, packet, 24, 4); // Número de secuencia
-        Array.Copy(BitConverter.GetBytes((uint)0), 0, packet, 28, 4); // Número de confirmación
-        packet[32] = 0x50; // Offset de datos y reservado
-        packet[33] = 0x02; // Flags (SYN)
-        packet[34] = 0x71; // Tamaño de ventana
-        packet[35] = 0x10;
-        packet[36] = 0x00; // Checksum (será calculado más adelante)
-        packet[37] = 0x00;
-        packet[38] = 0x00; // Puntero urgente
-        packet[39] = 0x00;
+        // Direcciones IP
+        Array.Copy(sourceIp.GetAddressBytes(), 0, packet, 12, 4); // IP origen
+        Array.Copy(destIp.GetAddressBytes(), 0, packet, 16, 4);   // IP destino
 
-        // Calcula el checksum (omitiendo en este ejemplo, lo haremos luego si es necesario)
+        // Añadimos el encabezado TCP manualmente
+        CreateTCPHeader(packet, 20, 12345, 80); // Puerto origen 12345, puerto destino 80
+
         return packet;
     }
 
-    static void SendRawPacket(byte[] packet, string destIp)
+    static byte[] CreateIPv6Packet(IPAddress sourceIp, IPAddress destIp)
     {
-        // Crea un socket RAW
-        Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.IP);
-        sock.Bind(new IPEndPoint(IPAddress.Parse(destIp), 0));  // Vincula el socket
+        byte[] packet = new byte[40 + 20]; // 40 bytes header IP + 20 bytes header TCP
 
-        // Configura el socket para incluir encabezados IP en los datos enviados
-        sock.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
+        // Header IPv6
+        packet[0] = 0x60; // Version (4 bits) + Traffic Class (8 bits)
 
-        IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse(destIp), 0);
-        sock.SendTo(packet, endPoint);
+        // Hop limit
+        packet[7] = 64;
 
-        Console.WriteLine("Paquete TCP/IP enviado.");
+        // Direcciones IP
+        Array.Copy(sourceIp.GetAddressBytes(), 0, packet, 8, 16);  // IP origen
+        Array.Copy(destIp.GetAddressBytes(), 0, packet, 24, 16);   // IP destino
+
+        // Añadimos el encabezado TCP manualmente
+        CreateTCPHeader(packet, 40, 12345, 80); // Puerto origen 12345, puerto destino 80
+
+        return packet;
+    }
+
+    static void CreateTCPHeader(byte[] packet, int offset, ushort sourcePort, ushort destPort)
+    {
+        // Puerto de origen (16 bits)
+        packet[offset] = (byte)(sourcePort >> 8);
+        packet[offset + 1] = (byte)(sourcePort & 0xFF);
+
+        // Puerto de destino (16 bits)
+        packet[offset + 2] = (byte)(destPort >> 8);
+        packet[offset + 3] = (byte)(destPort & 0xFF);
+
+        // Número de secuencia (32 bits, valor fijo para este ejemplo)
+        packet[offset + 4] = 0;
+        packet[offset + 5] = 0;
+        packet[offset + 6] = 0;
+        packet[offset + 7] = 1;
+
+        // Número de acuse de recibo (32 bits, valor fijo para este ejemplo)
+        packet[offset + 8] = 0;
+        packet[offset + 9] = 0;
+        packet[offset + 10] = 0;
+        packet[offset + 11] = 0;
+
+        // Offset de datos (4 bits) + Flags TCP (8 bits)
+        packet[offset + 12] = 0x50; // Offset de datos = 5 (sin opciones)
+        packet[offset + 13] = 0x02; // Bandera SYN
+
+        // Ventana (16 bits, valor fijo)
+        packet[offset + 14] = 0xFF;
+        packet[offset + 15] = 0xFF;
+
+        // Checksum (16 bits, valor fijo)
+        packet[offset + 16] = 0;
+        packet[offset + 17] = 0;
+
+        // Puntero urgente (16 bits, valor fijo)
+        packet[offset + 18] = 0;
+        packet[offset + 19] = 0;
+    }
+
+    static void SendPacket(byte[] packet, AddressFamily addressFamily)
+    {
+        Socket socket = new Socket(addressFamily, SocketType.Raw, ProtocolType.Tcp);
+
+        if (addressFamily == AddressFamily.InterNetwork)
+        {
+            IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 80);
+            socket.SendTo(packet, endPoint);
+        }
+        else if (addressFamily == AddressFamily.InterNetworkV6)
+        {
+            IPEndPoint endPoint = new IPEndPoint(IPAddress.IPv6Loopback, 80);
+            socket.SendTo(packet, endPoint);
+        }
+
+        Console.WriteLine("Paquete enviado.");
     }
 }
