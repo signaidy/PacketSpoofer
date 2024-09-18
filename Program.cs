@@ -293,7 +293,7 @@ class Program
     static ushort CalculateTcpv6Checksum(byte[] ipHeader, byte[] tcpHeader)
     {
         // Pseudo-encabezado para IPv6
-        byte[] pseudoHeader = new byte[36]; // 16 bytes origen + 16 bytes destino + 4 bytes
+        byte[] pseudoHeader = new byte[40]; // 16 bytes origen + 16 bytes destino + 4 bytes +4 bytes porque sino no corre xd
         Array.Copy(ipHeader, 8, pseudoHeader, 0, 32); // IP origen y destino
         pseudoHeader[32] = 0x00; // Zeros
         pseudoHeader[33] = 0x00;
@@ -323,12 +323,15 @@ class Program
             if (addressFamily == AddressFamily.InterNetwork)
             {
                 IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 80);
-                socket.SendTo(packet, endPoint);
+                int bytesSent = socket.SendTo(packet, endPoint);
+                Console.WriteLine($"Paquetes enviados: {bytesSent} bytes.");
             }
             else if (addressFamily == AddressFamily.InterNetworkV6)
             {
                 IPEndPoint endPoint = new IPEndPoint(IPAddress.IPv6Loopback, 80);
-                socket.SendTo(packet, endPoint);
+                int bytesSent = socket.SendTo(packet, endPoint);
+                Console.WriteLine($"Paquetes enviados: {bytesSent} bytes.");
+
             }
 
             Console.WriteLine("Paquete enviado.");
