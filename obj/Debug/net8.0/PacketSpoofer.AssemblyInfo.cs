@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PacketSpoofer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+189b2fbfd4949e6aeb105642c0b1490a8f0c7bb0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fa9a59dd74317b602b9dd83f9196c7ce668f7465")]
 [assembly: System.Reflection.AssemblyProductAttribute("PacketSpoofer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PacketSpoofer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
