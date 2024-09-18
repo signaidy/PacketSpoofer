@@ -8,7 +8,10 @@ class Program
     static void Main(string[] args)
     {
         string sourceIp = GetValidIP("origen", null);
+        if (sourceIp == null) return; // Usuario eligió 'exit'
+
         string destIp = GetValidIP("destino", sourceIp);
+        if (destIp == null) return; // Usuario eligió 'back' o 'exit'
 
         if (IPAddress.TryParse(sourceIp, out IPAddress srcAddress) && IPAddress.TryParse(destIp, out IPAddress dstAddress))
         {
@@ -80,97 +83,259 @@ class Program
 
     static byte[] CreateIPv4Packet(IPAddress sourceIp, IPAddress destIp)
     {
-        byte[] packet = new byte[20 + 20]; // 20 bytes header IP + 20 bytes header TCP
+        byte[] ipHeader = new byte[20];
+        byte[] tcpHeader = new byte[20];
+        byte[] packet = new byte[ipHeader.Length + tcpHeader.Length];
 
-        // Header IPv4
-        packet[0] = 0x45; // Version (4 bits) + IHL (4 bits)
-        packet[8] = 64;   // TTL
-        packet[9] = 6;    // Protocolo TCP
+        // Construcción del Encabezado IPv4
+        ipHeader[0] = 0x45; // Version (4 bits) + IHL (4 bits)
+        ipHeader[1] = 0x00; // Tipo de Servicio
+        ipHeader[2] = 0x00; // Longitud Total (Se actualizará más adelante)
+        ipHeader[3] = 0x28; // Longitud Total = 40 bytes (20 IP + 20 TCP)
+
+        ipHeader[4] = 0x00; // Identificación
+        ipHeader[5] = 0x00;
+
+        ipHeader[6] = 0x40; // Flags (No fragmentar) + Fragment Offset
+        ipHeader[7] = 0x00;
+
+        ipHeader[8] = 64;    // TTL
+        ipHeader[9] = 6;     // Protocolo TCP
+
+        // Checksum IPv4 (inicialmente 0, se calculará después)
+        ipHeader[10] = 0x00;
+        ipHeader[11] = 0x00;
 
         // Direcciones IP
-        Array.Copy(sourceIp.GetAddressBytes(), 0, packet, 12, 4); // IP origen
-        Array.Copy(destIp.GetAddressBytes(), 0, packet, 16, 4);   // IP destino
+        Array.Copy(sourceIp.GetAddressBytes(), 0, ipHeader, 12, 4); // IP origen
+        Array.Copy(destIp.GetAddressBytes(), 0, ipHeader, 16, 4);   // IP destino
 
-        // Añadimos el encabezado TCP manualmente
-        CreateTCPHeader(packet, 20, 12345, 80); // Puerto origen 12345, puerto destino 80
+        // Calcula el checksum IPv4
+        ushort ipChecksum = CalculateChecksum(ipHeader, ipHeader.Length);
+        ipHeader[10] = (byte)(ipChecksum >> 8);
+        ipHeader[11] = (byte)(ipChecksum & 0xFF);
+
+        // Construcción del Encabezado TCP
+        ushort sourcePort = 12345;
+        ushort destPort = 80;
+        tcpHeader[0] = (byte)(sourcePort >> 8);
+        tcpHeader[1] = (byte)(sourcePort & 0xFF);
+        tcpHeader[2] = (byte)(destPort >> 8);
+        tcpHeader[3] = (byte)(destPort & 0xFF);
+
+        // Número de secuencia
+        tcpHeader[4] = 0x00;
+        tcpHeader[5] = 0x00;
+        tcpHeader[6] = 0x00;
+        tcpHeader[7] = 0x01;
+
+        // Número de acuse de recibo
+        tcpHeader[8] = 0x00;
+        tcpHeader[9] = 0x00;
+        tcpHeader[10] = 0x00;
+        tcpHeader[11] = 0x00;
+
+        // Offset de datos (5) + Reservado + Flags (SYN)
+        tcpHeader[12] = 0x50; // Data offset = 5 (20 bytes), reservados
+        tcpHeader[13] = 0x02; // Flags: SYN
+
+        // Ventana
+        tcpHeader[14] = 0xFF;
+        tcpHeader[15] = 0xFF;
+
+        // Checksum TCP (inicialmente 0, se calculará después)
+        tcpHeader[16] = 0x00;
+        tcpHeader[17] = 0x00;
+
+        // Puntero urgente
+        tcpHeader[18] = 0x00;
+        tcpHeader[19] = 0x00;
+
+        // Construir el paquete completo (IP + TCP)
+        Array.Copy(ipHeader, 0, packet, 0, ipHeader.Length);
+        Array.Copy(tcpHeader, 0, packet, ipHeader.Length, tcpHeader.Length);
+
+        // Calcula el checksum TCP
+        ushort tcpChecksum = CalculateTcpChecksum(ipHeader, tcpHeader);
+        tcpHeader[16] = (byte)(tcpChecksum >> 8);
+        tcpHeader[17] = (byte)(tcpChecksum & 0xFF);
+
+        // Actualizar el checksum en el paquete
+        Array.Copy(tcpHeader, 0, packet, ipHeader.Length, tcpHeader.Length);
 
         return packet;
     }
 
     static byte[] CreateIPv6Packet(IPAddress sourceIp, IPAddress destIp)
     {
-        byte[] packet = new byte[40 + 20]; // 40 bytes header IP + 20 bytes header TCP
+        byte[] ipHeader = new byte[40];
+        byte[] tcpHeader = new byte[20];
+        byte[] packet = new byte[ipHeader.Length + tcpHeader.Length];
+        ushort payloadLength = (ushort)tcpHeader.Length;
 
-        // Header IPv6
-        packet[0] = 0x60; // Version (4 bits) + Traffic Class (8 bits)
+        // Construcción del Encabezado IPv6
+        ipHeader[0] = 0x60; // Version (4 bits) + Traffic Class (8 bits superiores)
+        ipHeader[1] = 0x00; // Traffic Class (8 bits inferiores)
+        ipHeader[2] = 0x00; // Flow Label
+        ipHeader[3] = 0x00;
 
-        // Hop limit
-        packet[7] = 64;
+        // Longitud del Payload (TCP Header)
+        ipHeader[4] = (byte)(payloadLength >> 8);  // Parte alta
+        ipHeader[5] = (byte)(payloadLength & 0xFF);  // Parte baja
+
+        // Protocolo TCP (Next Header) y Hop Limit
+        ipHeader[6] = 0x06; // TCP (Next Header)
+        ipHeader[7] = 0x40; // Hop Limit (64)
 
         // Direcciones IP
-        Array.Copy(sourceIp.GetAddressBytes(), 0, packet, 8, 16);  // IP origen
-        Array.Copy(destIp.GetAddressBytes(), 0, packet, 24, 16);   // IP destino
+        Array.Copy(sourceIp.GetAddressBytes(), 0, ipHeader, 8, 16);  // IP origen
+        Array.Copy(destIp.GetAddressBytes(), 0, ipHeader, 24, 16);   // IP destino
 
-        // Añadimos el encabezado TCP manualmente
-        CreateTCPHeader(packet, 40, 12345, 80); // Puerto origen 12345, puerto destino 80
+        // Construcción del Encabezado TCP
+        ushort sourcePort = 12345;
+        ushort destPort = 80;
+        tcpHeader[0] = (byte)(sourcePort >> 8);
+        tcpHeader[1] = (byte)(sourcePort & 0xFF);
+        tcpHeader[2] = (byte)(destPort >> 8);
+        tcpHeader[3] = (byte)(destPort & 0xFF);
+
+        // Número de secuencia
+        tcpHeader[4] = 0x00;
+        tcpHeader[5] = 0x00;
+        tcpHeader[6] = 0x00;
+        tcpHeader[7] = 0x01;
+
+        // Número de acuse de recibo
+        tcpHeader[8] = 0x00;
+        tcpHeader[9] = 0x00;
+        tcpHeader[10] = 0x00;
+        tcpHeader[11] = 0x00;
+
+        // Offset de datos (5) + Reservado + Flags (SYN)
+        tcpHeader[12] = 0x50; // Data offset = 5 (20 bytes), reservados
+        tcpHeader[13] = 0x02; // Flags: SYN
+
+        // Ventana
+        tcpHeader[14] = 0xFF;
+        tcpHeader[15] = 0xFF;
+
+        // Checksum TCP (inicialmente 0, se calculará después)
+        tcpHeader[16] = 0x00;
+        tcpHeader[17] = 0x00;
+
+        // Puntero urgente
+        tcpHeader[18] = 0x00;
+        tcpHeader[19] = 0x00;
+
+        // Construir el paquete completo (IP + TCP)
+        Array.Copy(ipHeader, 0, packet, 0, ipHeader.Length);
+        Array.Copy(tcpHeader, 0, packet, ipHeader.Length, tcpHeader.Length);
+
+        // Calcula el checksum TCP
+        ushort tcpChecksum = CalculateTcpv6Checksum(ipHeader, tcpHeader);
+        tcpHeader[16] = (byte)(tcpChecksum >> 8);
+        tcpHeader[17] = (byte)(tcpChecksum & 0xFF);
+
+        // Actualizar el checksum en el paquete
+        Array.Copy(tcpHeader, 0, packet, ipHeader.Length, tcpHeader.Length);
 
         return packet;
     }
 
-    static void CreateTCPHeader(byte[] packet, int offset, ushort sourcePort, ushort destPort)
+    static ushort CalculateChecksum(byte[] data, int length)
     {
-        // Puerto de origen (16 bits)
-        packet[offset] = (byte)(sourcePort >> 8);
-        packet[offset + 1] = (byte)(sourcePort & 0xFF);
+        uint sum = 0;
+        int i;
 
-        // Puerto de destino (16 bits)
-        packet[offset + 2] = (byte)(destPort >> 8);
-        packet[offset + 3] = (byte)(destPort & 0xFF);
+        // Sumar cada palabra de 16 bits
+        for (i = 0; i < length - 1; i += 2)
+        {
+            ushort word = BitConverter.ToUInt16(data, i);
+            sum += word;
+        }
 
-        // Número de secuencia (32 bits, valor fijo para este ejemplo)
-        packet[offset + 4] = 0;
-        packet[offset + 5] = 0;
-        packet[offset + 6] = 0;
-        packet[offset + 7] = 1;
+        // Si hay un byte sobrante, sumarlo
+        if (length % 2 == 1)
+        {
+            ushort word = (ushort)(data[length - 1] << 8);
+            sum += word;
+        }
 
-        // Número de acuse de recibo (32 bits, valor fijo para este ejemplo)
-        packet[offset + 8] = 0;
-        packet[offset + 9] = 0;
-        packet[offset + 10] = 0;
-        packet[offset + 11] = 0;
+        // Sumar el acarreo
+        while ((sum >> 16) != 0)
+        {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
 
-        // Offset de datos (4 bits) + Flags TCP (8 bits)
-        packet[offset + 12] = 0x50; // Offset de datos = 5 (sin opciones)
-        packet[offset + 13] = 0x02; // Bandera SYN
+        // Retornar el complemento a uno
+        return (ushort)~sum;
+    }
 
-        // Ventana (16 bits, valor fijo)
-        packet[offset + 14] = 0xFF;
-        packet[offset + 15] = 0xFF;
+    static ushort CalculateTcpChecksum(byte[] ipHeader, byte[] tcpHeader)
+    {
+        // Pseudo-encabezado para IPv4
+        byte[] pseudoHeader = new byte[12];
+        Array.Copy(ipHeader, 12, pseudoHeader, 0, 8); // IP origen y destino
+        pseudoHeader[8] = 0x00; // Zeros
+        pseudoHeader[9] = 0x06; // Protocolo TCP
+        ushort tcpLength = (ushort)tcpHeader.Length;
+        pseudoHeader[10] = (byte)(tcpLength >> 8);
+        pseudoHeader[11] = (byte)(tcpLength & 0xFF);
 
-        // Checksum (16 bits, valor fijo)
-        packet[offset + 16] = 0;
-        packet[offset + 17] = 0;
+        // Concatenar pseudo-encabezado y encabezado TCP
+        byte[] checksumData = new byte[pseudoHeader.Length + tcpHeader.Length];
+        Array.Copy(pseudoHeader, 0, checksumData, 0, pseudoHeader.Length);
+        Array.Copy(tcpHeader, 0, checksumData, pseudoHeader.Length, tcpHeader.Length);
 
-        // Puntero urgente (16 bits, valor fijo)
-        packet[offset + 18] = 0;
-        packet[offset + 19] = 0;
+        return CalculateChecksum(checksumData, checksumData.Length);
+    }
+
+    static ushort CalculateTcpv6Checksum(byte[] ipHeader, byte[] tcpHeader)
+    {
+        // Pseudo-encabezado para IPv6
+        byte[] pseudoHeader = new byte[36]; // 16 bytes origen + 16 bytes destino + 4 bytes
+        Array.Copy(ipHeader, 8, pseudoHeader, 0, 32); // IP origen y destino
+        pseudoHeader[32] = 0x00; // Zeros
+        pseudoHeader[33] = 0x00;
+        pseudoHeader[34] = 0x00;
+        pseudoHeader[35] = 0x06; // Protocolo TCP
+
+        ushort tcpLength = (ushort)tcpHeader.Length;
+        pseudoHeader[36] = (byte)(tcpLength >> 8);
+        pseudoHeader[37] = (byte)(tcpLength & 0xFF);
+        pseudoHeader[38] = 0x00; // Reservado
+        pseudoHeader[39] = 0x00;
+
+        // Concatenar pseudo-encabezado y encabezado TCP
+        byte[] checksumData = new byte[pseudoHeader.Length + tcpHeader.Length];
+        Array.Copy(pseudoHeader, 0, checksumData, 0, pseudoHeader.Length);
+        Array.Copy(tcpHeader, 0, checksumData, pseudoHeader.Length, tcpHeader.Length);
+
+        return CalculateChecksum(checksumData, checksumData.Length);
     }
 
     static void SendPacket(byte[] packet, AddressFamily addressFamily)
     {
-        Socket socket = new Socket(addressFamily, SocketType.Raw, ProtocolType.Tcp);
-
-        if (addressFamily == AddressFamily.InterNetwork)
+        try
         {
-            IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 80);
-            socket.SendTo(packet, endPoint);
-        }
-        else if (addressFamily == AddressFamily.InterNetworkV6)
-        {
-            IPEndPoint endPoint = new IPEndPoint(IPAddress.IPv6Loopback, 80);
-            socket.SendTo(packet, endPoint);
-        }
+            Socket socket = new Socket(addressFamily, SocketType.Raw, ProtocolType.IP);
 
-        Console.WriteLine("Paquete enviado.");
+            if (addressFamily == AddressFamily.InterNetwork)
+            {
+                IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 80);
+                socket.SendTo(packet, endPoint);
+            }
+            else if (addressFamily == AddressFamily.InterNetworkV6)
+            {
+                IPEndPoint endPoint = new IPEndPoint(IPAddress.IPv6Loopback, 80);
+                socket.SendTo(packet, endPoint);
+            }
+
+            Console.WriteLine("Paquete enviado.");
+        }
+        catch (SocketException ex)
+        {
+            Console.WriteLine($"Error al enviar el paquete: {ex.Message}");
+        }
     }
 }
