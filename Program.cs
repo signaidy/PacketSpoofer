@@ -344,11 +344,100 @@ class Program
                 Console.WriteLine($"Paquetes enviados: {bytesSent} bytes a {destinationIp}.");
             }
 
+            // Mostrar el paquete enviado
+            DisplayPacketDetails(packet, addressFamily);
+
             Console.WriteLine("Paquete enviado.");
         }
         catch (SocketException ex)
         {
             Console.WriteLine($"Error al enviar el paquete: {ex.Message}");
+        }
+    }
+
+    static void DisplayPacketDetails(byte[] packet, AddressFamily addressFamily)
+    {
+        if (addressFamily == AddressFamily.InterNetwork) // IPv4
+        {
+            Console.WriteLine("IPv4 Packet Details:");
+
+            // IP Header
+            Console.WriteLine("IP Header:");
+            Console.WriteLine($"Version and IHL: {packet[0]:X2} {packet[1]:X2}");
+            Console.WriteLine($"Type of Service: {packet[1]:X2}");
+            Console.WriteLine($"Total Length: {packet[2]:X2} {packet[3]:X2}");
+            Console.WriteLine($"Identification: {packet[4]:X2} {packet[5]:X2}");
+            Console.WriteLine($"Flags and Fragment Offset: {packet[6]:X2} {packet[7]:X2}");
+            Console.WriteLine($"TTL: {packet[8]:X2}");
+            Console.WriteLine($"Protocol: {packet[9]:X2}");
+            Console.WriteLine($"Header Checksum: {packet[10]:X2} {packet[11]:X2}");
+            Console.WriteLine($"Source IP: {packet[12]:X2}.{packet[13]:X2}.{packet[14]:X2}.{packet[15]:X2}");
+            Console.WriteLine($"Destination IP: {packet[16]:X2}.{packet[17]:X2}.{packet[18]:X2}.{packet[19]:X2}");
+
+            // TCP Header
+            Console.WriteLine("\nTCP Header:");
+            int tcpHeaderStart = 20; // Starting index of the TCP header
+            Console.WriteLine($"Source Port: {packet[tcpHeaderStart]:X2}{packet[tcpHeaderStart + 1]:X2}");
+            Console.WriteLine($"Destination Port: {packet[tcpHeaderStart + 2]:X2}{packet[tcpHeaderStart + 3]:X2}");
+            Console.WriteLine($"Sequence Number: {packet[tcpHeaderStart + 4]:X2}{packet[tcpHeaderStart + 5]:X2}{packet[tcpHeaderStart + 6]:X2}{packet[tcpHeaderStart + 7]:X2}");
+            Console.WriteLine($"Acknowledgment Number: {packet[tcpHeaderStart + 8]:X2}{packet[tcpHeaderStart + 9]:X2}{packet[tcpHeaderStart + 10]:X2}{packet[tcpHeaderStart + 11]:X2}");
+            Console.WriteLine($"Data Offset and Flags: {packet[tcpHeaderStart + 12]:X2} {packet[tcpHeaderStart + 13]:X2}");
+            Console.WriteLine($"Window Size: {packet[tcpHeaderStart + 14]:X2}{packet[tcpHeaderStart + 15]:X2}");
+            Console.WriteLine($"Checksum: {packet[tcpHeaderStart + 16]:X2}{packet[tcpHeaderStart + 17]:X2}");
+            Console.WriteLine($"Urgent Pointer: {packet[tcpHeaderStart + 18]:X2}{packet[tcpHeaderStart + 19]:X2}");
+
+            // Payload
+            Console.WriteLine("\nPayload:");
+            int payloadStart = tcpHeaderStart + 20; // Adjust if there is an option field
+            if (payloadStart < packet.Length)
+            {
+                for (int i = payloadStart; i < packet.Length; i++)
+                {
+                    Console.Write($"{packet[i]:X2} ");
+                    if ((i - payloadStart + 1) % 16 == 0)
+                        Console.WriteLine();
+                }
+            }
+        }
+        else if (addressFamily == AddressFamily.InterNetworkV6) // IPv6
+        {
+            Console.WriteLine("IPv6 Packet Details:");
+
+            // IPv6 Header
+            Console.WriteLine("IPv6 Header:");
+            Console.WriteLine($"Version: {packet[0]:X2}");
+            Console.WriteLine($"Traffic Class: {packet[1]:X2}");
+            Console.WriteLine($"Flow Label: {packet[2]:X2}{packet[3]:X2}{packet[4]:X2}");
+            Console.WriteLine($"Payload Length: {packet[4]:X2}{packet[5]:X2}");
+            Console.WriteLine($"Next Header: {packet[6]:X2}");
+            Console.WriteLine($"Hop Limit: {packet[7]:X2}");
+            Console.WriteLine($"Source IP: {BitConverter.ToString(packet, 8, 16).Replace("-", ":")}");
+            Console.WriteLine($"Destination IP: {BitConverter.ToString(packet, 24, 16).Replace("-", ":")}");
+
+            // TCP Header
+            Console.WriteLine("\nTCP Header:");
+            int tcpHeaderStart = 40; // Starting index of the TCP header
+            Console.WriteLine($"Source Port: {packet[tcpHeaderStart]:X2}{packet[tcpHeaderStart + 1]:X2}");
+            Console.WriteLine($"Destination Port: {packet[tcpHeaderStart + 2]:X2}{packet[tcpHeaderStart + 3]:X2}");
+            Console.WriteLine($"Sequence Number: {packet[tcpHeaderStart + 4]:X2}{packet[tcpHeaderStart + 5]:X2}{packet[tcpHeaderStart + 6]:X2}{packet[tcpHeaderStart + 7]:X2}");
+            Console.WriteLine($"Acknowledgment Number: {packet[tcpHeaderStart + 8]:X2}{packet[tcpHeaderStart + 9]:X2}{packet[tcpHeaderStart + 10]:X2}{packet[tcpHeaderStart + 11]:X2}");
+            Console.WriteLine($"Data Offset and Flags: {packet[tcpHeaderStart + 12]:X2} {packet[tcpHeaderStart + 13]:X2}");
+            Console.WriteLine($"Window Size: {packet[tcpHeaderStart + 14]:X2}{packet[tcpHeaderStart + 15]:X2}");
+            Console.WriteLine($"Checksum: {packet[tcpHeaderStart + 16]:X2}{packet[tcpHeaderStart + 17]:X2}");
+            Console.WriteLine($"Urgent Pointer: {packet[tcpHeaderStart + 18]:X2}{packet[tcpHeaderStart + 19]:X2}");
+
+            // Payload
+            Console.WriteLine("\nPayload:");
+            int payloadStart = tcpHeaderStart + 20; // Adjust if there is an option field
+            if (payloadStart < packet.Length)
+            {
+                for (int i = payloadStart; i < packet.Length; i++)
+                {
+                    Console.Write($"{packet[i]:X2} ");
+                    if ((i - payloadStart + 1) % 16 == 0)
+                        Console.WriteLine();
+                }
+            }
         }
     }
 }
